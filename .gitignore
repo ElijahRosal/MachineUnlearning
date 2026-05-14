@@ -1,0 +1,5 @@
+# Ignore utility scripts and build artifacts
+scripts/
+artifacts/
+__pycache__/
+*.pyc
