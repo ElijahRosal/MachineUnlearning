@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Dict, Iterable
+from typing import Dict
 
 import torch
 from torch import nn
@@ -11,6 +11,8 @@ from torch.utils.data import DataLoader
 
 @dataclass
 class TrainResult:
+    """Training output used by baseline, retraining, and unlearning workflows."""
+
     model_state: Dict[str, torch.Tensor]
     history: list[dict[str, float]]
     seconds: float
@@ -18,6 +20,8 @@ class TrainResult:
 
 @torch.no_grad()
 def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> dict[str, float]:
+    """Measure average loss and accuracy for one dataset split."""
+
     model.eval()
     criterion = nn.CrossEntropyLoss()
     total_loss = 0.0
@@ -33,6 +37,7 @@ def evaluate(model: nn.Module, loader: DataLoader, device: torch.device) -> dict
         total_correct += (predictions == labels).sum().item()
         total_samples += labels.size(0)
     return {
+        # max(1, total_samples) keeps evaluation safe for accidental empty loaders.
         "loss": total_loss / max(1, total_samples),
         "accuracy": total_correct / max(1, total_samples),
     }
@@ -47,6 +52,8 @@ def train_model(
     epochs: int = 30,
     lr: float = 0.01,
 ) -> TrainResult:
+    """Train a model and record per-epoch metrics plus wall-clock runtime."""
+
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -58,6 +65,8 @@ def train_model(
         running_loss = 0.0
         running_correct = 0
         running_samples = 0
+
+        # Standard supervised training loop over mini-batches.
         for features, labels in train_loader:
             features = features.to(device)
             labels = labels.to(device)
@@ -72,6 +81,7 @@ def train_model(
             running_correct += (predictions == labels).sum().item()
             running_samples += labels.size(0)
 
+        # Save both train and test metrics so experiments can be plotted later.
         train_metrics = {
             "epoch": float(epoch),
             "train_loss": running_loss / max(1, running_samples),
@@ -82,9 +92,12 @@ def train_model(
         history.append(train_metrics)
 
     seconds = perf_counter() - start
+    # Store a CPU copy so the result can be reused after the training model changes.
     return TrainResult(model_state={key: value.detach().cpu().clone() for key, value in model.state_dict().items()}, history=history, seconds=seconds)
 
 
 def load_state(model: nn.Module, state: Dict[str, torch.Tensor], device: torch.device) -> nn.Module:
+    """Load saved weights into a model and place it on the requested device."""
+
     model.load_state_dict(state)
     return model.to(device)

@@ -16,6 +16,8 @@ from .unlearning import approximate_unlearning, full_retrain
 
 
 def _annotate_bars(ax, bars) -> None:
+    """Add percentage labels to each bar in a chart."""
+
     for bar in bars:
         height = bar.get_height()
         label_offset = 0.015 if height >= 0 else -0.035
@@ -31,6 +33,9 @@ def _annotate_bars(ax, bars) -> None:
 
 
 def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
+    """Create the main demo visualization from the experiment summary."""
+
+    # Left panel: direct accuracy comparison for baseline, retrain, and unlearning.
     methods = [
         ("baseline", "Baseline", "#1f77b4"),
         ("retrain", "Full retraining", "#ff7f0e"),
@@ -40,7 +45,7 @@ def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
     x_positions = list(range(len(splits)))
     width = 0.24
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.8), constrained_layout=True)
 
     ax = axes[0]
     for index, (method_key, label, color) in enumerate(methods):
@@ -55,8 +60,9 @@ def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
     ax.set_xticklabels([label for _, label in splits])
     ax.set_ylim(0.0, 1.08)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=3, frameon=False)
 
+    # Right panel: accuracy deltas make the forgetting effect easier to see.
     ax = axes[1]
     comparison_methods = [
         ("retrain", "Full retraining - Baseline", "#ff7f0e"),
@@ -83,23 +89,31 @@ def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
     ax.set_xticklabels([label for _, label in comparison_splits])
     ax.set_ylim(-1.08, 1.08)
     ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, frameon=False)
 
     fig.savefig(output_dir / "accuracy_comparison.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
 def run_experiment(output_dir: Path) -> dict:
+    """Run the full baseline, retraining, and approximate unlearning demo."""
+
     output_dir.mkdir(parents=True, exist_ok=True)
     device = torch.device("cpu")
+
+    # Seed model initialization so the demo results are reproducible.
     torch.manual_seed(7)
+
+    # Harder unlearning scenario: remove every training example from class 1.
     splits = make_gaussian_mixture(removal_strategy="forget_class", remove_class=1)
     train_dataset = splits.train
     test_dataset = splits.test
 
+    # Build the retained/removed training subsets used for evaluation and unlearning.
     retained_dataset = subset_dataset(train_dataset, splits.retain_indices)
     removed_dataset = subset_dataset(train_dataset, splits.remove_indices)
 
+    # Separate loaders let each workflow train/evaluate on the right data split.
     train_loader = make_loader(train_dataset, batch_size=64, shuffle=True)
     retained_loader = make_loader(retained_dataset, batch_size=64, shuffle=True)
     test_loader = make_loader(test_dataset, batch_size=128, shuffle=False)
@@ -107,6 +121,7 @@ def run_experiment(output_dir: Path) -> dict:
 
     model_factory = lambda: SimpleMLP()
 
+    # 1. Baseline: train on all data before any unlearning request.
     baseline_model = model_factory()
     baseline_result = train_model(baseline_model, train_loader, test_loader, device=device, epochs=25, lr=0.01)
     baseline_model.load_state_dict(baseline_result.model_state)
@@ -116,6 +131,7 @@ def run_experiment(output_dir: Path) -> dict:
         "remove": evaluate(baseline_model, removed_loader, device),
     }
 
+    # 2. Full retraining: ground-truth baseline after deleting removed examples.
     retrain_result = full_retrain(model_factory, retained_loader, test_loader, device=device, epochs=25, lr=0.01)
     retrain_model = model_factory()
     retrain_model.load_state_dict(retrain_result.model_state)
@@ -125,6 +141,7 @@ def run_experiment(output_dir: Path) -> dict:
         "remove": evaluate(retrain_model, removed_loader, device),
     }
 
+    # 3. Approximate unlearning: start from baseline and perform faster retain/scrub updates.
     approx_result = approximate_unlearning(
         model_factory,
         baseline_result.model_state,
@@ -144,6 +161,7 @@ def run_experiment(output_dir: Path) -> dict:
         "remove": evaluate(approx_model, removed_loader, device),
     }
 
+    # Collect all metrics needed for the terminal demo, JSON artifact, and plot.
     summary = {
         "dataset": {
             "removal_strategy": splits.removal_strategy,
@@ -170,6 +188,7 @@ def run_experiment(output_dir: Path) -> dict:
         "approx_removed_accuracy_drop": baseline_metrics["remove"]["accuracy"] - approx_metrics["remove"]["accuracy"],
     }
 
+    # Persist results so the presentation can show both raw numbers and a chart.
     (output_dir / "results.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _save_accuracy_comparison_plot(summary, output_dir)
     return summary
