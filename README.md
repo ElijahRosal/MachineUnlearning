@@ -36,7 +36,11 @@ python -m nbconvert --to notebook --execute notebooks/experiment_notebook.ipynb 
 - End-to-end experiment runner: `machine_unlearning/experiment.py` and `run_experiment.py`
 - Notebook demo / presentation workflow: `notebooks/experiment_notebook.ipynb`
 
-The main experiment writes `artifacts/results.json` and an accuracy visualization to `artifacts/accuracy_comparison.png`.
+The main experiment writes:
+
+- Raw metrics: `artifacts/results.json`
+- Performance visualization: `artifacts/accuracy_comparison.png`
+- Efficiency visualization: `artifacts/runtime_comparison.png`
 
 ## Project Summary
 

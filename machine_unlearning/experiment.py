@@ -32,6 +32,21 @@ def _annotate_bars(ax, bars) -> None:
         )
 
 
+def _annotate_seconds(ax, bars) -> None:
+    """Add runtime labels to each bar in a chart."""
+
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height + 0.02,
+            f"{height:.2f}s",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+
 def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
     """Create the main demo visualization from the experiment summary."""
 
@@ -92,6 +107,37 @@ def _save_accuracy_comparison_plot(summary: dict, output_dir: Path) -> None:
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, frameon=False)
 
     fig.savefig(output_dir / "accuracy_comparison.png", dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+def _save_runtime_comparison_plot(summary: dict, output_dir: Path) -> None:
+    """Create a visualization of the efficiency gain from approximate unlearning."""
+
+    methods = ["Full retraining", "Approx. unlearning"]
+    runtimes = [summary["retrain"]["seconds"], summary["approximate_unlearning"]["seconds"]]
+    colors = ["#ff7f0e", "#2ca02c"]
+    speedup = summary["speedup_retrain_over_approx"]
+
+    fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    bars = ax.bar(methods, runtimes, color=colors, width=0.55)
+    _annotate_seconds(ax, bars)
+
+    ax.set_title("Runtime comparison for unlearning")
+    ax.set_ylabel("Seconds")
+    ax.set_ylim(0.0, max(runtimes) * 1.25)
+    ax.grid(axis="y", alpha=0.25)
+    ax.text(
+        0.5,
+        0.92,
+        f"Approx. unlearning is {speedup:.2f}x faster",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=11,
+        fontweight="bold",
+    )
+
+    fig.savefig(output_dir / "runtime_comparison.png", dpi=200, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -191,4 +237,5 @@ def run_experiment(output_dir: Path) -> dict:
     # Persist results so the presentation can show both raw numbers and a chart.
     (output_dir / "results.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     _save_accuracy_comparison_plot(summary, output_dir)
+    _save_runtime_comparison_plot(summary, output_dir)
     return summary
