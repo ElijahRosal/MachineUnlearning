@@ -9,7 +9,7 @@ This project implements a small machine unlearning pipeline in PyTorch. It train
 - Matplotlib
 - Jupyter / nbconvert if you want to run the notebook workflow
 
-The project was developed in a local `torch_cpu` conda environment, but any Python environment with the dependencies installed should work.
+The project was developed in a local conda environment, but any Python environment with the dependencies installed should work.
 
 Activate your preferred environment before running the commands below.
 
